@@ -1,2 +1,166 @@
-Hell World!
-<a href="https://github.com/fox369788-rgb/opencode01">GitHub</a>
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>飛機射擊遊戲</title>
+<style>
+  body { margin: 0; background: #0b1020; color: #fff; font-family: sans-serif; text-align: center; }
+  #wrap { max-width: 520px; margin: 0 auto; padding: 12px; }
+  canvas { background: #111a33; border: 2px solid #3af; border-radius: 8px; touch-action: none; }
+  .hud { display: flex; justify-content: space-between; margin: 8px 0; font-size: 18px; }
+  button { font-size: 18px; padding: 8px 18px; border-radius: 8px; border: 0; cursor: pointer; }
+  p.help { color: #9fb3d8; font-size: 14px; }
+  a { color: #3af; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>飛機射擊遊戲</h1>
+  <div class="hud"><span>分數：<b id="score">0</b></span><span>生命：<b id="life">3</b></span></div>
+  <canvas id="game" width="480" height="640"></canvas>
+  <p><button id="startBtn">開始 / 重新開始</button></p>
+  <p class="help">操作：滑鼠移動 / 觸控拖曳 / ←→↑↓ 或 WASD 移動，空白鍵或自動射擊。按開始後試玩，不用上傳。</p>
+  <p><a href="https://github.com/fox369788-rgb/opencode01">GitHub</a></p>
+</div>
+<script>
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const scoreEl = document.getElementById('score');
+const lifeEl = document.getElementById('life');
+const startBtn = document.getElementById('startBtn');
+
+let player, bullets, enemies, ebullets, score, life, running, lastTime, enemyTimer, keys = {};
+
+function reset() {
+  player = { x: 240, y: 560, w: 36, h: 28, speed: 320, cd: 0 };
+  bullets = []; enemies = []; ebullets = [];
+  score = 0; life = 3; enemyTimer = 0;
+  scoreEl.textContent = score; lifeEl.textContent = life;
+}
+
+function spawnEnemy() {
+  const w = 30 + Math.random() * 20;
+  enemies.push({ x: Math.random() * (cv.width - w), y: -30, w, h: 24, vy: 90 + Math.random() * 120 + score * 2, shootT: 1 + Math.random() * 2 });
+}
+
+function rectsHit(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update(dt) {
+  // move
+  let dx = 0, dy = 0;
+  if (keys.ArrowLeft || keys.a) dx -= 1;
+  if (keys.ArrowRight || keys.d) dx += 1;
+  if (keys.ArrowUp || keys.w) dy -= 1;
+  if (keys.ArrowDown || keys.s) dy += 1;
+  player.x += dx * player.speed * dt;
+  player.y += dy * player.speed * dt;
+  player.x = Math.max(0, Math.min(cv.width - player.w, player.x));
+  player.y = Math.max(0, Math.min(cv.height - player.h, player.y));
+
+  // auto shoot
+  player.cd -= dt;
+  if (player.cd <= 0 || keys[' ']) {
+    bullets.push({ x: player.x + player.w / 2 - 3, y: player.y - 12, w: 6, h: 12, vy: -520 });
+    player.cd = 0.18;
+  }
+
+  enemyTimer -= dt;
+  if (enemyTimer <= 0) { spawnEnemy(); enemyTimer = 0.5; }
+
+  bullets.forEach(b => b.y += b.vy * dt);
+  bullets = bullets.filter(b => b.y > -20);
+
+  enemies.forEach(e => {
+    e.y += e.vy * dt;
+    e.shootT -= dt;
+    if (e.shootT <= 0 && e.y > 0 && e.y < 400) {
+      ebullets.push({ x: e.x + e.w / 2 - 3, y: e.y + e.h, w: 6, h: 10, vy: 220 });
+      e.shootT = 1.5 + Math.random();
+    }
+  });
+  ebullets.forEach(b => b.y += b.vy * dt);
+  ebullets = ebullets.filter(b => b.y < cv.height + 20);
+  enemies = enemies.filter(e => e.y < cv.height + 40);
+
+  // bullets vs enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      if (rectsHit(enemies[i], bullets[j])) {
+        enemies.splice(i, 1); bullets.splice(j, 1);
+        score += 10; scoreEl.textContent = score;
+        break;
+      }
+    }
+  }
+  // enemies vs player
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (rectsHit(enemies[i], player)) {
+      enemies.splice(i, 1); life -= 1; lifeEl.textContent = life;
+      if (life <= 0) { running = false; startBtn.textContent = '遊戲結束，再來一次'; }
+      break;
+    }
+  }
+  for (let i = ebullets.length - 1; i >= 0; i--) {
+    if (rectsHit(ebullets[i], player)) {
+      ebullets.splice(i, 1); life -= 1; lifeEl.textContent = life;
+      if (life <= 0) { running = false; startBtn.textContent = '遊戲結束，再來一次'; }
+      break;
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  // player
+  ctx.fillStyle = '#3af';
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(player.x + player.w / 2 - 3, player.y - 6, 6, 8);
+  // bullets
+  ctx.fillStyle = '#ffeb3b';
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+  // enemies
+  ctx.fillStyle = '#f44336';
+  enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+  ctx.fillStyle = '#ff9800';
+  ebullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+  if (!running) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 240, cv.width, 120);
+    ctx.fillStyle = '#fff';
+    ctx.font = '28px sans-serif';
+    ctx.fillText(life <= 0 ? 'GAME OVER' : '按開始試玩', 130, 310);
+  }
+}
+
+function loop(t) {
+  if (!running) { draw(); return; }
+  const dt = Math.min(0.05, (t - lastTime) / 1000 || 0.016);
+  lastTime = t;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+
+startBtn.onclick = () => { reset(); running = true; startBtn.textContent = '重新開始'; lastTime = performance.now(); requestAnimationFrame(loop); };
+window.addEventListener('keydown', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true; if (e.key === ' ') e.preventDefault(); });
+window.addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
+
+// mouse / touch
+let drag = false;
+function toPos(ev) {
+  const r = cv.getBoundingClientRect();
+  const cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+  const cy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
+  return { x: cx * cv.width / r.width, y: cy * cv.height / r.height };
+}
+cv.addEventListener('pointerdown', ev => { drag = true; const p = toPos(ev); player.x = p.x - player.w / 2; player.y = p.y - player.h / 2; });
+cv.addEventListener('pointermove', ev => { if (drag) { const p = toPos(ev); player.x = p.x - player.w / 2; player.y = p.y - player.h / 2; } });
+window.addEventListener('pointerup', () => drag = false);
+
+reset(); running = false; draw();
+</script>
+</body>
+</html>
